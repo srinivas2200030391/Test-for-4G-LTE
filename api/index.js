@@ -70,7 +70,7 @@ app.get("/api/voltages", async (req, res) => {
 
 app.get("/", (req, res) => {
   res.send(
-    "💖 Welcome to the Voltage API! Upload your CSV at `/api/voltages/uploadCsv` and fetch data from `/api/voltages`. Stay electric, darling ⚡"
+    " Welcome to the Voltage API! Upload your CSV at `/api/voltages/uploadCsv` and fetch data from `/api/voltages`."
   );
 });module.exports = app; // export for Vercel
 
