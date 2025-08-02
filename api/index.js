@@ -74,6 +74,11 @@ app.get("/api/voltages", async (req, res) => {
   }
 });
 
+app.get("/", (req, res) => {
+  res.send(
+    "Welcome to the Voltage API! Use /api/voltages/uploadCsv to upload CSV files and / api / voltages to fetch readings."
+  );
+});
 app.listen(3000, () => {
   console.log("Server running on port 3000");
 });
