@@ -68,6 +68,27 @@ app.get("/api/voltages", async (req, res) => {
   }
 });
 
+app.delete("/api/voltages", async (req, res) => {
+  try {
+    const client = new MongoClient(uri);
+    await client.connect();
+    const db = client.db("voltagedb");
+    const collection = db.collection("VoltageReading");
+
+    const result = await collection.deleteMany({});
+    await client.close();
+
+    res.send(
+      `💀 All voltage readings deleted. Count: ${result.deletedCount}`
+    );
+  } catch (err) {
+    res
+      .status(500)
+      .send("Couldn’t delete the data, sweetheart 😞: " + err.message);
+  }
+});
+
+
 app.get("/", (req, res) => {
   res.send(
     " Welcome to the Voltage API! Upload your CSV at `/api/voltages/uploadCsv` and fetch data from `/api/voltages`."
