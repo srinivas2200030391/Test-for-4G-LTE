@@ -3,7 +3,8 @@ import json
 import requests
 import os
 
-HTTP_NEW_URL = "http://localhost:3000/api/voltages/new"
+# HTTP_NEW_URL = "http://localhost:3000/api/voltages/new"
+HTTP_NEW_URL = "https://testfor4glte.vercel.app/api/voltages/new"
 LAST_TS_FILE = "last_fetched.txt"
 
 def get_last_timestamp():
