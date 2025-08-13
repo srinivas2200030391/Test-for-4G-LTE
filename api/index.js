@@ -3,7 +3,9 @@ const multer = require("multer");
 const csv = require("csv-parser");
 const { Readable } = require("stream");
 const { MongoClient } = require("mongodb");
-const kafka = require("kafka-node"); // 💡 Added Kafka
+const { Kafka } = require("kafkajs");
+const fs = require("fs");
+const path = require("path");
 
 const app = express();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -11,32 +13,50 @@ const upload = multer({ storage: multer.memoryStorage() });
 const uri =
   "mongodb://mongo:raDwXmWnTEqyJPUjFibZByeIqpKAScAS@switchback.proxy.rlwy.net:14376";
 
-app.use(express.json());
+// -----------------------------
+// Kafka Setup with SSL 💌
+// -----------------------------
+const kafkaBrokers = ["kafka-36cdd7ab-cronack-2088.e.aivencloud.com:19352"];
+const certsDir = "D:/MPM INFOSOFT/Basic API to receive data/certs";
 
-// -----------------------------
-// Kafka Setup 💌
-// -----------------------------
-const kafkaHost = "BROKER_IP:9092"; // Change BROKER_IP to your Kafka broker host
+const kafka = new Kafka({
+  clientId: "express-server",
+  brokers: kafkaBrokers,
+  ssl: {
+    rejectUnauthorized: true,
+    ca: [fs.readFileSync(path.join(certsDir, "ca.pem"), "utf-8")],
+    cert: fs.readFileSync(path.join(certsDir, "service.cert"), "utf-8"),
+    key: fs.readFileSync(path.join(certsDir, "service.key"), "utf-8"),
+  },
+});
+
 const kafkaTopic = "control-commands";
+let producer;
 
-const kafkaClient = new kafka.KafkaClient({ kafkaHost });
-const producer = new kafka.Producer(kafkaClient);
+async function initKafka() {
+  try {
+    producer = kafka.producer();
+    await producer.connect();
+    console.log("[KAFKA] Producer connected ✅");
+  } catch (error) {
+    console.error("[KAFKA] Producer connection error ❌:", error);
+  }
+}
 
-producer.on("ready", () => {
-  console.log("[KAFKA] Producer ready");
-});
-
-producer.on("error", (err) => {
-  console.error("[KAFKA] Producer error:", err);
-});
-
-// Helper to send Kafka event
-function sendKafkaEvent(event) {
-  const payloads = [{ topic: kafkaTopic, messages: JSON.stringify(event) }];
-  producer.send(payloads, (err, data) => {
-    if (err) console.error("[KAFKA] Send error:", err);
-    else console.log("[KAFKA] Event sent:", data);
-  });
+async function sendKafkaEvent(event) {
+  if (!producer) {
+    console.warn("[KAFKA] Producer not ready, skipping send");
+    return;
+  }
+  try {
+    await producer.send({
+      topic: kafkaTopic,
+      messages: [{ value: JSON.stringify(event) }],
+    });
+    console.log("[KAFKA] Event sent 📡:", event);
+  } catch (err) {
+    console.error("[KAFKA] Send error ❌:", err);
+  }
 }
 
 // -----------------------------
@@ -73,9 +93,9 @@ app.post("/api/voltages/uploadCsv", upload.single("file"), async (req, res) => {
         await client.close();
 
         // 💌 Send Kafka event after successful insert
-        sendKafkaEvent({ event: "new_data" });
+        await sendKafkaEvent({ event: "new_data" });
 
-        res.send("✨ CSV uploaded and saved");
+        res.send("✨ CSV uploaded and saved, Kafka notified securely!");
       })
       .on("error", (err) => {
         res.status(500).send("CSV parsing error: " + err.message);
@@ -103,23 +123,8 @@ app.get("/api/voltages", async (req, res) => {
 });
 
 // -----------------------------
-// Delete All Readings
+// Get Only New Readings
 // -----------------------------
-app.delete("/api/voltages", async (req, res) => {
-  try {
-    const client = new MongoClient(uri);
-    await client.connect();
-    const db = client.db("voltagedb");
-    const collection = db.collection("VoltageReading");
-
-    const result = await collection.deleteMany({});
-    await client.close();
-
-    res.send(`💀 All voltage readings deleted. Count: ${result.deletedCount}`);
-  } catch (err) {
-    res.status(500).send("Couldn’t delete the data: " + err.message);
-  }
-});
 app.get("/api/voltages/new", async (req, res) => {
   try {
     const since = req.query.since;
@@ -147,14 +152,35 @@ app.get("/api/voltages/new", async (req, res) => {
   }
 });
 
+// -----------------------------
+// Delete All Readings
+// -----------------------------
+app.delete("/api/voltages", async (req, res) => {
+  try {
+    const client = new MongoClient(uri);
+    await client.connect();
+    const db = client.db("voltagedb");
+    const collection = db.collection("VoltageReading");
+
+    const result = await collection.deleteMany({});
+    await client.close();
+
+    res.send(`💀 All voltage readings deleted. Count: ${result.deletedCount}`);
+  } catch (err) {
+    res.status(500).send("Couldn’t delete the data: " + err.message);
+  }
+});
+
 app.get("/", (req, res) => {
   res.send(
     "Welcome to the Voltage API! Upload your CSV at `/api/voltages/uploadCsv` and fetch data from `/api/voltages`."
   );
 });
 
-module.exports = app;
-
-app.listen(3000, () => {
-  console.log("Server running on port 3000");
+// -----------------------------
+// Start Server + Kafka
+// -----------------------------
+app.listen(3000, async () => {
+  console.log("🚀 Server running on port 3000");
+  await initKafka();
 });

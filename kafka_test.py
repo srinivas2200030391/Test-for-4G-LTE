@@ -3,7 +3,6 @@ import json
 import requests
 import os
 
-#HTTP_NEW_URL = "https://testfor4glte.vercel.app/api/voltages/new"
 HTTP_NEW_URL = "http://localhost:3000/api/voltages/new"
 LAST_TS_FILE = "last_fetched.txt"
 
@@ -25,7 +24,6 @@ def poll_new_data():
             data = response.json()
             if data:
                 print(f"[INFO] New records: {data}")
-                # Update last timestamp to latest record
                 latest_ts = max([d["timestamp"] for d in data])
                 set_last_timestamp(latest_ts)
             else:
@@ -36,15 +34,21 @@ def poll_new_data():
         print(f"[ERROR] Polling error: {e}")
 
 def start_kafka_listener():
+    certs_dir = r"D:\MPM INFOSOFT\Basic API to receive data\certs"
+
     consumer = KafkaConsumer(
-        'control-commands',
-        bootstrap_servers=['localhost:9092'],  # Same as Express producer
-        value_deserializer=lambda v: json.loads(v.decode('utf-8')),
-        group_id='pi-4g-listener',
-        auto_offset_reset='latest'
+        "control-commands",
+        bootstrap_servers=["kafka-36cdd7ab-cronack-2088.e.aivencloud.com:19352"],
+        security_protocol="SSL",
+        ssl_cafile=os.path.join(certs_dir, "ca.pem"),
+        ssl_certfile=os.path.join(certs_dir, "service.cert"),
+        ssl_keyfile=os.path.join(certs_dir, "service.key"),
+        value_deserializer=lambda v: json.loads(v.decode("utf-8")) if v else None,
     )
     print("[INFO] Listening for Kafka events...")
     for message in consumer:
+        if not message.value:
+            continue
         print(f"[EVENT] Kafka message: {message.value}")
         if message.value.get("event") == "new_data":
             poll_new_data()
