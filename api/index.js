@@ -17,8 +17,8 @@ const uri =
 // Kafka Setup with SSL 💌
 // -----------------------------
 const kafkaBrokers = ["kafka-36cdd7ab-cronack-2088.e.aivencloud.com:19352"];
-const certsDir = path.join(__dirname, "..", "certs");
-
+const certsDir = path.join(__dirname, "certs");
+console.log(certsDir);
 const kafka = new Kafka({
   clientId: "express-server",
   brokers: kafkaBrokers,

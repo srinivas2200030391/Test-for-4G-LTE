@@ -34,15 +34,8 @@ def poll_new_data():
         print(f"[ERROR] Polling error: {e}")
 
 def start_kafka_listener():
-    # Get current file's directory
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-
-    # Go up one level and into "certs"
-    certs_dir = os.path.join(current_dir, ".", "certs")
-
-    # Normalize the path so ".." is resolved
-    certs_dir = os.path.normpath(certs_dir)
-    print(certs_dir)
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # This points to /api
+    certs_dir = os.path.join(BASE_DIR, "api/certs")
     consumer = KafkaConsumer(
         "control-commands",
         bootstrap_servers=["kafka-36cdd7ab-cronack-2088.e.aivencloud.com:19352"],
