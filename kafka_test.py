@@ -6,7 +6,8 @@ from googletrans import Translator
 from gtts import gTTS
 from playsound import playsound
 
-HTTP_NEW_URL = "http://localhost:3000/api/messages/new"
+#HTTP_NEW_URL = "http://localhost:3000/api/messages/new"
+HTTP_NEW_URL = "https://testfor4glte.vercel.app/api/messages/new"
 LAST_TS_FILE = "last_fetched.txt"
 
 translator = Translator()
