@@ -193,7 +193,7 @@ const { MongoClient } = require("mongodb");
 const { Kafka } = require("kafkajs");
 const fs = require("fs");
 const path = require("path");
-
+const crypto = require("crypto");
 const app = express();
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -201,7 +201,7 @@ const upload = multer({ storage: multer.memoryStorage() });
 // MongoDB Connection URI
 // -----------------------------
 const uri =
-  "mongodb://mongo:raDwXmWnTEqyJPUjFibZByeIqpKAScAS@switchback.proxy.rlwy.net:14376";
+  "mongodb://mongo:ZSMUSCbQfiUwyLtDOXcRmtsNgjYxCIpP@shortline.proxy.rlwy.net:14721";
 
 // -----------------------------
 // Kafka Setup with SSL 💌
@@ -243,13 +243,53 @@ async function sendKafkaEvent(event) {
 // -----------------------------
 // CSV Upload Route
 // -----------------------------
+const ENCRYPTION_KEY_B64 = process.env.ENCRYPTION_KEY; // base64 of 16 bytes
+
+if (!ENCRYPTION_KEY_B64) {
+  console.error("ENCRYPTION_KEY not set in env");
+  // Optionally exit or handle accordingly
+}
+
+const key = Buffer.from(ENCRYPTION_KEY_B64, "base64");
+if (key.length !== 16) {
+  console.error("ENCRYPTION_KEY must decode to 16 bytes (AES-128).");
+  // handle error
+}
+
 app.post("/api/voltages/uploadCsv", upload.single("file"), async (req, res) => {
   if (!req.file) return res.status(400).send("No file uploaded");
 
-  const readings = [];
-
   try {
-    const csvStream = Readable.from(req.file.buffer.toString()).pipe(
+    // req.file.buffer = nonce(12) || ciphertext || tag(16)
+    const buf = req.file.buffer;
+    if (buf.length < 12 + 16) {
+      return res.status(400).send("Encrypted payload too short");
+    }
+
+    const nonce = buf.slice(0, 12);
+    const ctAndTag = buf.slice(12);
+    if (ctAndTag.length < 16) {
+      return res.status(400).send("Ciphertext missing auth tag");
+    }
+    const tag = ctAndTag.slice(ctAndTag.length - 16);
+    const ciphertext = ctAndTag.slice(0, ctAndTag.length - 16);
+    
+    const decipher = crypto.createDecipheriv("aes-128-gcm", key, nonce);
+    decipher.setAuthTag(tag);
+
+    let decrypted;
+    try {
+      const pt1 = decipher.update(ciphertext);
+      const pt2 = decipher.final();
+      decrypted = Buffer.concat([pt1, pt2]);
+    } catch (decErr) {
+      console.error("Decryption failed:", decErr);
+      return res.status(400).send("Decryption failed or data tampered with");
+    }
+
+    // Now parse CSV from decrypted buffer
+    const readings = [];
+    const csvStream = Readable.from(decrypted.toString("utf-8")).pipe(
       csv(["timestamp", "voltage"])
     );
 
@@ -273,15 +313,17 @@ app.post("/api/voltages/uploadCsv", upload.single("file"), async (req, res) => {
         await collection.insertMany(readings);
         await client.close();
 
-        // 💌 Send Kafka event after successful insert
-        await sendKafkaEvent({ event: "new_data" });
+        // Send Kafka event after successful insert
+        //await sendKafkaEvent({ event: "new_data" });
 
-        res.send("✨ CSV uploaded and saved, Kafka notified securely!");
+        res.send("✨ CSV uploaded, decrypted, saved, Kafka notified!");
       })
       .on("error", (err) => {
+        console.error("CSV parse error:", err);
         res.status(500).send("CSV parsing error: " + err.message);
       });
   } catch (err) {
+    console.error("Something went wrong:", err);
     res.status(500).send("Something went wrong: " + err.message);
   }
 });
